@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/csv"
+	"flag"
 	"fmt"
 	"os"
+	"time"
 )
 
 type problemData struct {
@@ -37,23 +39,38 @@ func parseLinesToProblems(csvLines [][]string) []problemData {
 	}
 	return problems
 }
+func readAnswer(answerCh chan string) {
+	answer := ""
+	fmt.Scanf("%s", &answer)
+	answerCh <- answer
+}
 
-func askUser(problems []problemData) int {
+func askUser(problems []problemData, timer *time.Timer) int {
 	correct := 0
 	for _, problem := range problems {
-		answer := ""
 		fmt.Printf("%s ?\n", problem.Question)
-		fmt.Scanf("%s", &answer)
-		if answer == problem.Answer {
-			correct++
+		answerCh := make(chan string)
+		go readAnswer(answerCh)
+		select {
+		case <-timer.C:
+			return correct
+		case answer := <-answerCh:
+			if answer == problem.Answer {
+				correct++
+			}
 		}
 	}
 	return correct
 }
+
 func main() {
-	filename := "problems.csv"
-	csvLines := readCsvLines(filename)
+	filename := flag.String("csv", "problems.csv", "a csv file in the format of 'question,answer'")
+	timeLimit := flag.Int("limit", 30, "the time limit for the quiz in seconds")
+	flag.Parse()
+	csvLines := readCsvLines(*filename)
 	problems := parseLinesToProblems(csvLines)
-	correct := askUser(problems)
-	fmt.Printf("User answered %d correct %d not correct", correct, len(problems)-correct)
+	newtimer := time.NewTimer(time.Duration(*timeLimit) * time.Second)
+	correct := askUser(problems, newtimer)
+	fmt.Printf("%d\n", correct)
+	fmt.Printf("You scored %d out of %d.\n", correct, len(problems))
 }
